@@ -1,0 +1,205 @@
+---
+title: "Predicting Profitability"	
+subtitle: "Predict sales of producstn using regresion in R"
+author: "JONATHAN AYALA GONZALEZ - For Blackwell Electronics "
+date: "June of 2019"
+output:
+  html_document:
+    fig_height: 5
+    fig_width: 7
+    number_sections: yes
+    theme: journal
+    toc: yes
+    toc_depth: 2
+  pdf_document:
+    toc: yes
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+
+library(lattice)
+library(ggplot2)
+library(caret)
+library(mlbench)
+library(readr)
+library(C50)
+library(rpart)
+library(rpart.plot)
+library(class)
+library(dplyr)
+library(reshape2)
+library(scales)
+library(plotly)
+library(corrplot)
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+The main target o predict the sales in four different product types while assessing the effects service and customer reviews have on sales. You'll be using Regression to build machine learning models for this analyses using a choice of two of three popular algorithms. Once you have determined which one works better on the provided data set, Danielle would like you to predict the sales of four product types from the new products list and prepare a report of your findings.
+
+******
+# Previous Analysis.
+******
+
+```{r,eval=TRUE,echo=FALSE}
+
+setwd("~/UBIQUM/DATA ANALYTICS II/TASK_03/Profitability/Datasets")
+
+# Carga del Dataset.
+
+initial_data_existing_products<- read.csv("existingproductattributes2017.csv")
+new_products<- read.csv("newproductattributes2017.csv")
+
+
+# Dummifyin the Data Set ####
+
+data_existing_products <- dummyVars(" ~ .", data = initial_data_existing_products)
+
+existing_products <- data.frame(predict(data_existing_products, newdata = initial_data_existing_products))
+
+# Eliminación de NA attributes. ####
+
+existing_products$BestSellersRank <- NULL
+
+# Correlation Matrix.####
+
+corrData <- cor(existing_products)
+
+corrplot(corrData,   
+           diag=TRUE,type="upper", 
+           title= "Matriz de Correlación  Existing Attributes", tl.cex = 0.5, addCoef.col = "black",
+           number.cex = 0.3 , insig = "blank", mar=c(0,0,1,0))
+
+
+# Data variables filtering.####
+
+existing_products2 <- existing_products[,c(14,16,18,20,21,22,27,28)]
+
+
+# Removing Outliers.
+
+existing_products2 <- existing_products2 [-which((existing_products2$Volume > 6000)),]
+
+existing_products2 <- existing_products2 [-which((existing_products2$Price > 2000)),]
+
+existing_products2 <- existing_products2 [-which((existing_products2$x2StarReviews > 100)),]
+
+existing_products2 <- existing_products2 [-which((existing_products2$PositiveServiceReview > 250)),]
+
+
+# New Correlation Matrix.
+
+corrData_2 <- cor(existing_products2)
+
+corrplot(corrData_2,   
+           diag=TRUE,type="upper", 
+           title= "Matriz de Correlación  New Filtered Attributes", tl.cex = 0.5, addCoef.col = "black",
+           number.cex = 0.3 , insig = "blank", mar=c(0,0,1,0))
+
+
+# Multiple linear Regressions. ####
+
+# Linear Model Construction.
+
+linear_model <- lm(Volume ~ Price + x4StarReviews + x2StarReviews + PositiveServiceReview + NegativeServiceReview + Recommendproduct + ProfitMargin, data=existing_products2)
+
+summary(linear_model)
+
+plot(linear_model)
+
+
+# Data Set Partition ####
+
+inTrain <- createDataPartition(y = existing_products2$Volume, p = .75,list = FALSE)
+
+training <- existing_products2[ inTrain,]
+testing <- existing_products2[-inTrain,]
+
+
+# Making sales volume predictions on the new products dataset.  ####
+
+set.seed(123)
+
+# A train control is used to tune some of the metrics that will be used during the training process.
+
+ctrl2 <- trainControl(method = "boot", number= 1000)
+
+# Se crea un for loop.
+
+a <- c("lm","rf","knn", "svmLinear", "svmRadial")
+
+combined <- c()
+
+
+for (i in a) {
+  fit <- train(Volume ~ .,data = training,method = i, trControl=ctrl2)
+  prediccion <- predict(fit,testing)
+  res <- postResample(pred = prediccion, obs = testing$Volume)
+  
+ combined <- cbind(res,combined)
+ 
+    }
+
+  colnames(combined) <- c("svmRadial","svmLinear","knn","rf","lm")
+  
+
+  print(combined)
+  
+  
+
+# Se visualizan los resultados de forma gráfica.
+  
+melt_combined <- melt(combined)
+
+ggplot(melt_combined, aes(x=Var2, y=value))+ geom_col(stat="identity", color="black") +
+ facet_wrap(Var2~., scales="free") +labs(title="Models Comparison") + xlab("Model") + ylab("Value")
+
+
+# SVM Linear Manual.####
+
+fit_svm <- train(Volume ~ .,data = training,method = "svmLinear", trControl=ctrl2)
+
+Predicciones_svmlinear_exp <- predict(fit_svm,newdata = testing)
+
+postResample(pred = Predicciones_svmlinear_exp, obs = testing$Volume)
+
+testing_exp <- testing
+
+
+
+# Plotting the Relative Error.
+
+testing_exp$Volume_predicted <- Predicciones_svmlinear_exp
+
+testing_exp$relative_error <- ((abs(testing_exp$Volume - testing_exp$Volume_predicted )))/testing_exp$Volume
+
+ggplot(testing_exp, aes(x=Volume, y=relative_error)) + geom_point() + ylab("Relative Error") + labs(title="Plotted Relative Error")
+
+
+
+# Making Predictions over the new data set.####
+
+Predicciones_svmlinear <- predict(fit_svm,newdata = new_products)
+
+summary(Predicciones_svmlinear)
+
+new_products2 <- new_products
+
+new_products2$results <- Predicciones_svmlinear
+
+new_products3 <- new_products2[which(new_products2$ProductType=="PC"| new_products2$ProductType=="Laptop" | new_products2$ProductType=="Netbook" | new_products2$ProductType=="Smartphone"),]
+
+new_products3_chart <- new_products3[,c(1,2,19)]
+
+
+ggplot(new_products3_chart, aes(y=results, x=factor(ProductNum), color=ProductType, fill=ProductType)) + 
+    geom_bar(position="dodge", stat="identity", color="black") + labs(title="Predicted Sales") +   
+    facet_grid(~ProductType, scales="free_x") + xlab("Product Number") + ylab("Predicted Sales")
+
+
+```
+
+
+

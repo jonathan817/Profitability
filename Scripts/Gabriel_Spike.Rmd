@@ -1,0 +1,63 @@
+---
+title: "Gabrile Spike"
+author: "Jonathan Ayala G."
+date: "13/6/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+pacman:: p_load(caret, reshape, ggplot2, dplyr)
+
+x <- runif(50, min = 0, max = 100) # generate 50 random number from 0 to 100
+z <- runif(50, min = 0, max = 100)
+a <- runif(50, min = 0, max = 100)
+b <- runif(50, min = 0, max = 100)
+y <- runif(50, min = 0, max = 100)
+
+df <- as.data.frame(cbind(x,z,a,b,y))
+
+set.seed(100)
+in_training <- createDataPartition(df$y, p = 0.8, list = F)
+
+train <- df[in_training,]
+test <- df[-in_training,]
+
+# Se crea un loop.
+
+a <- c("lm", "rf","knn", "svmLinear", "svmRadial")
+
+combined <- c()
+
+
+for (i in a) {
+  fit <- train(y ~ .,data = train,method = i)
+  prediccion <- predict(fit,test)
+  res <- postResample(pred = prediccion, obs = test$y)
+  
+  combined <- cbind(res,combined)
+ 
+    }
+
+  colnames (combined) <- c("lm", "rf","knn", "svmLinear", "svmRadial")
+  
+  print(combined)
+  
+  
+# Create a chart.
+  
+  ggplot(melt_combined, aes(x=X1, y=value))+ geom_col(stat="identity", color="black") +
+ facet_wrap(X2~., scales="free") +labs(title="Models Comparison") + xlab("Model") + ylab("Value")
+  
+  
+  
+  ggplot(compare_model_melt, aes(x=model, y=value))+
+ geom_col()+
+ facet_grid(metric~., scales="free")
+  
+  ggplot(data=private_entire_34_lloguerT42018_clean_ordered_melt, aes(x=neighbourhood, y=value, fill=variable)) + geom_bar(stat="identity", color="black", position = "dodge") + labs(title="Comparación Alquiler Ordinario - Alquiler Túristico", subtitle= "Barrios de Barcelona- Abril 2019") + xlab("Barrio") + ylab("Alquiler en Terminos Mensuales") + scale_fill_discrete(labels=c("Alquiler Ordinario","Alquiler Habitiación Airbnb","Alquiler Piso/Casa Entera Airbnb" ))+ coord_flip()
+
+
+
+  
+```
